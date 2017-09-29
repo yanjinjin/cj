@@ -79,11 +79,18 @@ class detail:
     def GET(self):
 	search = web.input()
         product_id = search.get('product_id')
+	product_name = search.get('product_name')
 	url = search.get('url')
 	print product_id,url
 	m = Model()
         result = m.select_from_price_by_product_id(product_id)
-	return render.detail(result,url)	
+	categories = ""
+	series = ""
+	for i in result:
+	    categories = categories + i[1] + ","
+	for i in result:
+	    series = series + i[0] + ","
+	return render.detail(categories.strip(","),series.strip(","),url,product_name)	
 
 class register:
     def GET(self):
@@ -139,21 +146,21 @@ class admin:
         count = []
         user_count = m.select_rowcount_from_user()
         count.append(user_count)
-	#####test#######
-	m.insert_into_product("1022233","iphone mobile","http://www.baidu.com")
-	m.insert_into_price("1022233","2000")
-	###############
         return render.admin(user,count) 
     def POST(self):
+	if sess.username == None or sess.username != "admin@admin":
+            raise web.seeother("/index")
 	search = web.input()
         btn = search.get('btn')
         m = Model()
         if btn == "jd":
             jd = jdSpider()
-            result = jd.get_all_result()
-            for i in result:
-                print "%s\n////////////"%i
-
+            result = jd.get_all_price()
+	    for i in result:
+                print("商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
+		m.insert_into_product(i[0],i[1].strip(),i[3])
+	        m.insert_into_price(i[0],i[2])
+	raise web.seeother('index')
 if not __name__ == "__main__":    
     application = app.wsgifunc()
 else:

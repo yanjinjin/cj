@@ -1,36 +1,47 @@
-from spider import *
-
+# -*- coding: utf-8 -*-
 from spider import *
 import os
+from bs4 import BeautifulSoup
 
-class JD(spider_parse):
+class jdSpider(spider_parse):
     def __init__(self):
-	file = "download/black/"
+	file = "download/jd/"
         dir = os.path.join(os.path.dirname(__file__),file)
-	self.real_dir = os.path.join(dir , "data-phishtank-com")
-	s=Spider("http://data.phishtank.com/data/68b4c2263bc5687ad3f275f69de3dbba4ae5219aa88c349125d73a064260f866/online-valid.csv",dir)
-        s.set_white("\.csv")
-	s.run()
+	self.real_dir = os.path.join(dir , "list-jd-com")
+	s=Spider("http://list.jd.com/list.html?cat=9987,653,655&page=1&delivery=1&trans=1&JL=4_21_0",dir)
+        s.set_white("list\.jd\.com/list")
+        s.set_white("cat=9987,653,655")
+	#s.run()
     
-    def parse_data(self):
-	result=[]
-	filelist=[]
-	self.get_all_file(self.real_dir,filelist)
-	for file in filelist:
-	    print file
-	    file_object = open(file, 'r')
-            try:
-                text = file_object.readlines()
-	        for line in text:
-		    column = line.split(',')
-		    result.append(column[1])
-	    finally:
-            	file_object.close()
-	return result 
+    #get product_id,product_name
+    def parse_url(self,data):
+	#time.sleep(60*random.random()+1)#sleep 1~60 good spider
+	result1 = []
+	try:
+	    soup = BeautifulSoup(data, "html.parser")
+	    items = soup.select('li.gl-item')
+	except AttributeError as e:
+	    return []
+	for item in items:
+    	    result2 = []
+	    sku = item.find('div')['data-sku']
+	    if sku == None:
+		return []
 
+    	    price_url = 'http://p.3.cn/prices/mgets?skuIds=J_' + str(sku)
+    	    #s = Spider_one(url)
+    	    #result=s.parse_html()
+	    #price = result.json()[0]['p']
+    	    price=str(int(60*random.random()+1))
+	    name = item.find('div', class_="p-name").find('em').string
+    	    item_url = 'http:' + item.find('div', class_="p-name").find('a')['href']
+	    result2.append(str(sku))
+	    result2.append(name)
+	    result2.append(price)
+	    result2.append(item_url)
+	    result1.append(result2)
+	return result1
 
-class jdSpider:
-    def get_all_result(self):
-        s = PhishtankBlackSpider()
-        result=s.parse_data()
-        return result
+    def get_all_price(self):
+        result=self.parse_data()
+	return result

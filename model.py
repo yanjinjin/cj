@@ -86,16 +86,28 @@ class Model:
         self.conn.execute("update user set verifier = ? where username = ?" ,(1,username))
         self.conn.commit()
     
+    def select_from_product_by_product_id(self,product_id):
+        sql = "select product_id from %s where product_id = %s"%(self.table_product , product_id)
+        self.cu.execute(""+sql+"")
+   	res = self.cu.fetchall()
+        for i in res:
+            return i[0]
+        return None
+ 
     def insert_into_product(self,product_id, name , url):
-        sql = "insert into %s (product_id, name, url,date) values ('%s', '%s', %s, '%s')"%(self.table_product,product_id, name, url,datetime.datetime.now())
+	old_product_id = self.select_from_product_by_product_id(product_id)
+	if old_product_id!=None:
+	    return False
+        sql = "insert into %s (product_id, name, url,date) values ('%s', '%s', %s, '%s')"%(self.table_product,product_id, name, url,datetime.datetime.now().strftime('%Y%m%d'))
         print sql
-        self.conn.execute("insert into product (product_id, name, url,date) values (?,?,?,?)" , (product_id, name, url,datetime.datetime.now()))
+        self.conn.execute("insert into product (product_id, name, url,date) values (?,?,?,?)" , (product_id, name, url,datetime.datetime.now().strftime('%Y%m%d')))
         self.conn.commit()
+	return True
          
     def insert_into_price(self,product_id,price):
-	sql = "insert into %s (product_id, price,date) values ('%s', '%s', '%s')"%(self.table_price,product_id, price,datetime.datetime.now())
+	sql = "insert into %s (product_id, price,date) values ('%s', '%s', '%s')"%(self.table_price,product_id, price,datetime.datetime.now().strftime('%Y%m%d'))
         print sql
-	self.conn.execute("insert into price (product_id, price,date) values (?,?,?)" , (product_id, price,datetime.datetime.now()))
+	self.conn.execute("insert into price (product_id, price,date) values (?,?,?)" , (product_id, price,datetime.datetime.now().strftime('%Y%m%d')))
         self.conn.commit()    
 
     def select_from_product(self):

@@ -1,9 +1,43 @@
-$def with (result,url)
+$def with (categories,series,url,product_name)
+<script src="/static/js/highcharts.js"></script>
+<script type="text/javascript">
+jQuery(function () {
+Highcharts.chart('container', {
+    chart: {
+        type: 'line'
+    },
+    title: {
+        text: ''
+    },
+    xAxis: {
+        categories: [$categories]
+    },
+    yAxis: {
+        title: {
+            text: '价格 (人民币/元)'
+        }
+    },
+    plotOptions: {
+        line: {
+            dataLabels: {
+                enabled: false
+            },
+            enableMouseTracking: false
+        }
+    },
+    series: [{
+	name: '近一周价格曲线',
+        data: [$series]
+    }]
+});
+});
+</script>
 <div class="row">
     <div class="col-lg-12">    
-    <p><a href=$url>去看看</a></p>
-    <p>近一月价格曲线图</p>
+    <a href=$url><p>商品名称：$product_name</p>
+    <p>网址：$url</p>
+    <p>最新价格(人民币)：$series.split(',')[-1]元</p>
+    </a>
+    <div id="container"></div>
     </div>
 </div>
-
-
