@@ -6,8 +6,9 @@ sys.path.append(curdir)
 import os,web
 from web.session import Session
 import math
-import thread
+import threading
 from time import ctime,sleep
+import commands
 from model import *
 from plog import *
 from verifycode import *
@@ -65,6 +66,11 @@ else:
 
 class index:
     def GET(self):
+	if sess.username == None:	
+	    plog("who visit")
+	else:
+	    plog("%s visit"%sess.username)
+	
 	m = Model()
 	result = m.select_from_product()
 	return render.index(result)
@@ -77,6 +83,10 @@ class index:
 
 class detail:
     def GET(self):
+	if sess.username == None:
+            raise web.seeother('login')
+        else:
+            plog("%s view detail "%sess.username)
 	search = web.input()
         product_id = search.get('product_id')
 	product_name = search.get('product_name')
@@ -126,7 +136,10 @@ class login:
             sess.username=username
             print sess.username
             web.setcookie('username', username)
-            raise web.seeother('index')
+            plog("%s login success"%sess.username)
+	    raise web.seeother('index')
+            
+	plog("who login failed")
         return render.message("loginerr")
 
 class logout:
@@ -141,28 +154,53 @@ class admin:
     def GET(self):
         if sess.username == None or sess.username != "admin@admin":
 	    raise web.seeother("/index")
+	
+	cmd = "tail -100 %s"%os.path.join(curdir,'cj.log')
+	print cmd
+ 	log_content = commands.getoutput(cmd).split('\n')
 	m = Model()
         user = m.select_from_user_for_admin()
         count = []
         user_count = m.select_rowcount_from_user()
         count.append(user_count)
-        return render.admin(user,count) 
+        return render.admin(log_content,user,count) 
     def POST(self):
 	if sess.username == None or sess.username != "admin@admin":
             raise web.seeother("/index")
-	search = web.input()
-        btn = search.get('btn')
-        m = Model()
-        if btn == "jd":
-            jd = jdSpider()
-            result = jd.get_all_price()
-	    for i in result:
-                print("商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
-		m.insert_into_product(i[0],i[1].strip(),i[3])
-	        m.insert_into_price(i[0],i[2])
-	raise web.seeother('index')
+	pass
+
+def task_build():
+    while True:
+        #sleep(60*24*24*random.random() + 24*60*60)
+	sleep(60*random.random() + 60)
+	jd = jdSpider()
+        result = jd.get_all_price()
+        n = 0
+	m = Model()
+	plog("start task build......")
+	for i in result:
+            print("商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
+            m.insert_into_product(i[0],i[1].strip(),i[3])
+            m.insert_into_price(i[0],i[2])
+    	    n=n+1
+	plog("product num : %d"%n)
+
+def task_del():
+    while True:
+	#sleep(60*24*24*random.random() + 24*60*60)
+        sleep(60*random.random() + 60)
+	m = Model()
+        plog("start task del......")
+	m.del_from_price_timeout()		
+
+t1=threading.Thread(target=task_build)
+t2=threading.Thread(target=task_del)
+t1.setDaemon(True)
+t2.setDaemon(True)
+t1.start()
+t2.start()
+
 if not __name__ == "__main__":    
     application = app.wsgifunc()
 else:
     app.run()
-	

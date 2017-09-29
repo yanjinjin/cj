@@ -124,6 +124,12 @@ class Model:
         sql = "select price , date from %s where (product_id = '%s') order by date DESC"%(self.table_price,product_id)
         self.cu.execute(""+sql+"")
         return self.cu.fetchall()
+    
+    def del_from_price_timeout(self):
+	sql = "delete from %s where date = '%s'"%(self.table_price , str(int(datetime.datetime.now().strftime('%Y%m%d'))-5))
+        print sql
+	self.conn.execute(""+sql+"")
+        self.conn.commit()
      
     def __del__(self):
 	print 'close db conn'

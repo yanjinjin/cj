@@ -7,7 +7,7 @@ Highcharts.chart('container', {
         type: 'line'
     },
     title: {
-        text: ''
+        text: '近一周价格曲线'
     },
     xAxis: {
         categories: [$categories]
@@ -26,7 +26,7 @@ Highcharts.chart('container', {
         }
     },
     series: [{
-	name: '近一周价格曲线',
+	name: '日期',
         data: [$series]
     }]
 });
@@ -34,10 +34,16 @@ Highcharts.chart('container', {
 </script>
 <div class="row">
     <div class="col-lg-12">    
-    <a href=$url><p>商品名称：$product_name</p>
-    <p>网址：$url</p>
-    <p>最新价格(人民币)：$series.split(',')[-1]元</p>
-    </a>
+    <blockquote>
+	<a href=$url>   
+        <p>$product_name</p>
+	</a>
+        <small>
+	    <p>网址  $url</p>
+	    <p>最新价格(人民币)  ￥$series.split(',')[-1]元</p>
+        </small>
+    </blockquote>
+    <hr size=10>
     <div id="container"></div>
     </div>
 </div>
