@@ -2,6 +2,7 @@
 from spider import *
 import os
 from bs4 import BeautifulSoup
+import json
 
 class jdSpider(spider_parse):
     def __init__(self):
@@ -15,7 +16,6 @@ class jdSpider(spider_parse):
     
     #get product_id,product_name
     def parse_url(self,data):
-	#time.sleep(60*random.random()+1)#sleep 1~60 good spider
 	result1 = []
 	try:
 	    soup = BeautifulSoup(data, "html.parser")

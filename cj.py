@@ -14,6 +14,7 @@ from plog import *
 from verifycode import *
 from weixin import *
 from jd import *
+from tb import *
 
 web.config.debug = False
 
@@ -159,11 +160,14 @@ class admin:
 	print cmd
  	log_content = commands.getoutput(cmd).split('\n')
 	m = Model()
+   	product = m.select_from_product()
         user = m.select_from_user_for_admin()
         count = []
         user_count = m.select_rowcount_from_user()
+	product_count = m.select_rowcount_from_product()
         count.append(user_count)
-        return render.admin(log_content,user,count) 
+        count.append(product_count)
+	return render.admin(log_content,user,product,count) 
     def POST(self):
 	if sess.username == None or sess.username != "admin@admin":
             raise web.seeother("/index")
@@ -173,17 +177,35 @@ def task_build():
     while True:
         #sleep(60*24*24*random.random() + 24*60*60)
 	sleep(60*random.random() + 60)
+	####################################
 	jd = jdSpider()
-        result = jd.get_all_price()
-        n = 0
+        jd_result = jd.get_all_price()
+	####################################
+        tb = tbSpider()
+        tb_result = tb.get_all_price()
+	####################################
+	n = 0
 	m = Model()
-	plog("start task build......")
-	for i in result:
-            print("商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
-            m.insert_into_product(i[0],i[1].strip(),i[3])
-            m.insert_into_price(i[0],i[2])
-    	    n=n+1
-	plog("product num : %d"%n)
+	plog("start jd task build......")
+	if lock.acquire():
+	    for i in jd_result:
+                #print("jd 商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
+                m.insert_into_product(i[0],i[1].strip(),i[3])
+                m.insert_into_price(i[0],i[2])
+    	        n=n+1
+	    lock.release()
+	plog("jd product num : %d"%n)
+	####################################
+        n = 0
+	plog("start tb task build......")
+        if lock.acquire():
+            for i in tb_result:
+                print("tb 商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
+                m.insert_into_product(i[0],i[1].strip(),i[3])
+                m.insert_into_price(i[0],i[2])
+                n=n+1
+            lock.release()
+        plog("tb product num : %d"%n)
 
 def task_del():
     while True:
@@ -191,8 +213,11 @@ def task_del():
         sleep(60*random.random() + 60)
 	m = Model()
         plog("start task del......")
-	m.del_from_price_timeout()		
+	if lock.acquire():
+	    m.del_from_price_timeout()		
+ 	    lock.release()
 
+lock = threading.Lock()
 t1=threading.Thread(target=task_build)
 t2=threading.Thread(target=task_del)
 t1.setDaemon(True)

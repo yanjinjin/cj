@@ -119,7 +119,16 @@ class Model:
         sql = "select product_id, name ,url,date from %s where (name like '%s') order by date DESC"%(self.table_product,"%"+product_name+'%')
         self.cu.execute(""+sql+"")
         return self.cu.fetchall()
-    
+
+    def select_rowcount_from_product(self):
+        sql = "select id from %s"%(self.table_product)
+        self.cu.execute(""+sql+"")
+        res = self.cu.fetchall()
+        rowcount=0
+        for i in res:
+            rowcount = rowcount + 1
+        return rowcount
+   
     def select_from_price_by_product_id(self,product_id):
         sql = "select price , date from %s where (product_id = '%s') order by date DESC"%(self.table_price,product_id)
         self.cu.execute(""+sql+"")
