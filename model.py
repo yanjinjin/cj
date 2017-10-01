@@ -22,7 +22,7 @@ class Model:
 	    sql = "insert into %s (username,passwd,verifier,date) values ('%s', '%s', %d,'%s')"%(self.table_user, self.admin, "111111", 1, datetime.datetime.now())
             print sql
 	    self.conn.execute(""+sql+"")
-            sql = "create table %s(id integer primary key, product_id text, name text, url text, date text,domain1 text, domain2 text) "%(self.table_product)
+            sql = "create table %s(id integer primary key, product_id text, name text, url text, is_cj text , date text,domain1 text, domain2 text) "%(self.table_product)
             self.conn.execute(""+sql+"")
             print 'create db %s'%(self.table_product)    
 	    
@@ -87,23 +87,26 @@ class Model:
         self.conn.commit()
     
     def select_from_product_by_product_id(self,product_id):
-        sql = "select product_id from %s where product_id = %s"%(self.table_product , product_id)
+        sql = "select product_id,name,url,date from %s where product_id = %s limit 1"%(self.table_product , product_id)
         self.cu.execute(""+sql+"")
-   	res = self.cu.fetchall()
-        for i in res:
-            return i[0]
-        return None
+   	return self.cu.fetchall()
  
     def insert_into_product(self,product_id, name , url):
-	old_product_id = self.select_from_product_by_product_id(product_id)
-	if old_product_id!=None:
+	old_product = self.select_from_product_by_product_id(product_id)
+	if old_product != []:
 	    return False
         sql = "insert into %s (product_id, name, url,date) values ('%s', '%s', %s, '%s')"%(self.table_product,product_id, name, url,datetime.datetime.now().strftime('%Y%m%d'))
         print sql
         self.conn.execute("insert into product (product_id, name, url,date) values (?,?,?,?)" , (product_id, name, url,datetime.datetime.now().strftime('%Y%m%d')))
         self.conn.commit()
 	return True
-         
+    
+    def update_from_product_by_product_id(self , product_id):
+	sql = "update %s set is_cj = '1',date = '%s' where product_id = '%s'"%(self.table_product,product_id,datetime.datetime.now().strftime('%Y%m%d'))
+        print sql
+        self.conn.execute(""+sql+"")
+        self.conn.commit()
+ 
     def insert_into_price(self,product_id,price):
 	sql = "insert into %s (product_id, price,date) values ('%s', '%s', '%s')"%(self.table_price,product_id, price,datetime.datetime.now().strftime('%Y%m%d'))
         print sql
@@ -115,8 +118,13 @@ class Model:
         self.cu.execute(""+sql+"")
         return self.cu.fetchall()
 
+    def select_from_product_cj(self):
+	sql = "select product_id, name ,url, date from %s where is_cj = '1' order by date DESC"%(self.table_product)
+        self.cu.execute(""+sql+"")
+        return self.cu.fetchall()
+
     def select_from_product_by_product_name(self,product_name):
-        sql = "select product_id, name ,url,date from %s where (name like '%s') order by date DESC"%(self.table_product,"%"+product_name+'%')
+        sql = "select product_id, name ,url,date from %s where (name like '%s') and is_cj = '1' order by date DESC"%(self.table_product,"%"+product_name+'%')
         self.cu.execute(""+sql+"")
         return self.cu.fetchall()
 
@@ -134,10 +142,16 @@ class Model:
         self.cu.execute(""+sql+"")
         return self.cu.fetchall()
     
-    def del_from_price_timeout(self):
-	sql = "delete from %s where date = '%s'"%(self.table_price , str(int(datetime.datetime.now().strftime('%Y%m%d'))-5))
-        print sql
+    def del_from_product_timeout(self):
+	sql = "delete from %s where date = '%s'"%(self.table_product , (datetime.datetime.now() - datetime.timedelta(days=5)).strftime('%Y%m%d'))
+	print sql
 	self.conn.execute(""+sql+"")
+        self.conn.commit()
+
+    def del_from_price_timeout(self):
+        sql = "delete from %s where date = '%s'"%(self.table_price , (datetime.datetime.now() - datetime.timedelta(days=5)).strftime('%Y%m%d'))
+        print sql
+        self.conn.execute(""+sql+"")
         self.conn.commit()
      
     def __del__(self):

@@ -801,7 +801,7 @@ class Spider_one(object):
 	    print e.reason
 	    print "connect failed"+url	
    	    pass
-	time.sleep(30*random.random()+1)#sleep 1~30 good spider
+	time.sleep(6*random.random()+1)#sleep 1~6 good spider
  
     def get_rescode(self):
 	#200

@@ -1,4 +1,4 @@
-$def with (categories,series,url,product_name)
+$def with (categories,series,product)
 <script src="/static/js/highcharts.js"></script>
 <script type="text/javascript">
 jQuery(function () {
@@ -35,11 +35,11 @@ Highcharts.chart('container', {
 <div class="row">
     <div class="col-lg-12">    
     <blockquote>
-	<a href=$url>   
-        <p>$product_name</p>
+	<a href=$product[0][2]>   
+        <p>$product[0][1]</p>
 	</a>
         <small>
-	    <p>网址  $url</p>
+	    <p>网址  $product[0][2]</p>
 	    <p>最新价格(人民币)  ￥$series.split(',')[-1]元</p>
         </small>
     </blockquote>

@@ -73,7 +73,7 @@ class index:
 	    plog("%s visit"%sess.username)
 	
 	m = Model()
-	result = m.select_from_product()
+	result = m.select_from_product_cj()
 	return render.index(result)
     def POST(self):
 	search = web.input()	
@@ -90,9 +90,6 @@ class detail:
             plog("%s view detail "%sess.username)
 	search = web.input()
         product_id = search.get('product_id')
-	product_name = search.get('product_name')
-	url = search.get('url')
-	print product_id,url
 	m = Model()
         result = m.select_from_price_by_product_id(product_id)
 	categories = ""
@@ -101,7 +98,8 @@ class detail:
 	    categories = categories + i[1] + ","
 	for i in result:
 	    series = series + i[0] + ","
-	return render.detail(categories.strip(","),series.strip(","),url,product_name)	
+	product = m.select_from_product_by_product_id(product_id)
+	return render.detail(categories.strip(","),series.strip(","),product)	
 
 class register:
     def GET(self):
@@ -175,8 +173,8 @@ class admin:
 
 def task_build():
     while True:
-        #sleep(60*24*24*random.random() + 24*60*60)
-	sleep(60*random.random() + 60)
+        sleep(60*24*24*random.random() + 24*60*60)
+	#sleep(60*random.random() + 60)
 	####################################
 	jd = jdSpider()
         jd_result = jd.get_all_price()
@@ -189,10 +187,18 @@ def task_build():
 	plog("start jd task build......")
 	if lock.acquire():
 	    for i in jd_result:
-                #print("jd 商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
-                m.insert_into_product(i[0],i[1].strip(),i[3])
+                print("jd 商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
+		m.insert_into_product(i[0],i[1].strip(),i[3])
                 m.insert_into_price(i[0],i[2])
     	        n=n+1
+		all_price = m.select_from_price_by_product_id(i[0])
+                old_price = 0
+                for j in all_price:
+                    old_price = float(j[0])
+		    break
+		print float(i[2]),old_price
+		if float(i[2]) <= old_price * 80/100:
+		    m.update_from_product_by_product_id(i[0])
 	    lock.release()
 	plog("jd product num : %d"%n)
 	####################################
@@ -204,16 +210,25 @@ def task_build():
                 m.insert_into_product(i[0],i[1].strip(),i[3])
                 m.insert_into_price(i[0],i[2])
                 n=n+1
+		all_price = m.select_from_price_by_product_id(i[0])
+                old_price = 0
+                for j in all_price:
+                    old_price = float(j[0])
+                    break
+                print float(i[2]),old_price
+                if float(i[2]) <= old_price * 80/100:
+                    m.update_from_product_by_product_id(i[0])
             lock.release()
         plog("tb product num : %d"%n)
 
 def task_del():
     while True:
-	#sleep(60*24*24*random.random() + 24*60*60)
-        sleep(60*random.random() + 60)
+	sleep(60*24*24*random.random() + 24*60*60)
+        #sleep(60*random.random() + 60)
 	m = Model()
         plog("start task del......")
 	if lock.acquire():
+	    m.del_from_product_timeout()
 	    m.del_from_price_timeout()		
  	    lock.release()
 
