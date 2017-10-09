@@ -11,9 +11,9 @@ class tbSpider(spider_parse):
 	self.real_dir = os.path.join(dir , "s-taobao-com")
 	os.system('rm -rf '+dir)
         os.system('rm -rf '+dir+'/.gwd')
-	s=Spider("https://s.taobao.com/search?q=%E5%A4%96%E5%A5%97",dir)
+	s=Spider("https://s.taobao.com/list?spm=a21bo.50862.201867-links-0.38.7f35a3b33tWAVy&q=%E5%A4%96%E5%A5%97&cat=50344007&style=grid&seller_type=taobao",dir)
         s.set_white("s\.taobao\.com/search")
-        s.set_white("q=%E5%A4%96%E5%A5%97")
+        #s.set_white("q=%E5%A4%96%E5%A5%97")
 	s.run()
     
     #get product_id,product_name

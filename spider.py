@@ -358,10 +358,13 @@ class Downloader:
                     new_job = Job(link, link, job.get_retry_times() + 1) 
                     self.store.put(new_job)
                 else:
-                    self.mem_inst.remember(job, links)
-                    self.store.mark_as_done(job)
-                    safe_print("exceed 10 retry times")
-                    #os._exit(1)
+		    try:
+                        self.mem_inst.remember(job, links)
+                        self.store.mark_as_done(job)
+                        safe_print("exceed 10 retry times")
+                        #os._exit(1)
+		    except:
+			pass
             except RememberFailedError, e:
                 raise e
             except Exception, e:
@@ -768,15 +771,18 @@ class spider_parse:
     def parse_data(self):
 	result=[]
 	filelist=[]
-	self.get_all_file(self.real_dir,filelist)
-	for file in filelist:
-	    print file
-	    file_object = open(file, 'r')
-            try:
-                data = file_object.read()
-		result+=self.parse_url(data)
-	    finally:
-            	file_object.close()
+	try:
+	    self.get_all_file(self.real_dir,filelist)
+	    for file in filelist:
+	        print file
+	        file_object = open(file, 'r')
+                try:
+                    data = file_object.read()
+		    result+=self.parse_url(data)
+	        finally:
+            	    file_object.close()
+	except:
+	    pass
 	return result         
 
 class Spider_one(object):

@@ -15,7 +15,7 @@ class jdSpider(spider_parse):
         s.set_white("list\.jd\.com/list")
         s.set_white("cat=9987,653,655")
 	s.set_white("JL=4_21_0")
-	#s.run()
+	s.run()
     
     #get product_id,product_name
     def parse_url(self,data):
