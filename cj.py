@@ -9,6 +9,7 @@ import math
 import threading
 from time import ctime,sleep
 import commands
+from multiprocessing import Process, Pool
 from model import *
 from plog import *
 from verifycode import *
@@ -171,76 +172,55 @@ class admin:
             raise web.seeother("/index")
 	pass
 
-def task_build():
+def task_del():
+    m = Model()
+    plog("start task del......")
+    m.del_from_product_timeout()
+    m.del_from_price_timeout()
+
+def task_insert(result):
+    n = 0
+    m = Model()
+    plog("start task insert......")
+    for i in result:
+        print("商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
+        m.insert_into_product(i[0],i[1].strip(),i[3])
+        m.insert_into_price(i[0],i[2])
+        n=n+1
+        all_price = m.select_from_price_by_product_id(i[0])
+        old_price = 0
+        for j in all_price:
+            old_price = float(j[0])
+            break
+        print float(i[2]),old_price
+        if float(i[2]) <= old_price * 80/100:
+            m.update_from_product_by_product_id(i[0])
+    plog("product num : %d"%n)
+ 
+def task_spider():
     while True:
-        sleep(60*24*24*random.random() + 24*60*60)
+        sleep(60*60*24*random.random() + 24*60*60)
 	#sleep(60*random.random() + 60)
+	task_del()
 	####################################
 	jd = jdSpider()
         jd_result = jd.get_all_price()
+	task_insert(jd_result)
 	####################################
         tb = tbSpider()
         tb_result = tb.get_all_price()
+	task_insert(tb_result)
 	####################################
-	n = 0
-	m = Model()
-	plog("start jd task build......")
-	if lock.acquire():
-	    for i in jd_result:
-                print("jd 商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
-		m.insert_into_product(i[0],i[1].strip(),i[3])
-                m.insert_into_price(i[0],i[2])
-    	        n=n+1
-		all_price = m.select_from_price_by_product_id(i[0])
-                old_price = 0
-                for j in all_price:
-                    old_price = float(j[0])
-		    break
-		print float(i[2]),old_price
-		if float(i[2]) <= old_price * 80/100:
-		    m.update_from_product_by_product_id(i[0])
-	    lock.release()
-	plog("jd product num : %d"%n)
-	####################################
-        n = 0
-	plog("start tb task build......")
-        if lock.acquire():
-            for i in tb_result:
-                print("tb 商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
-                m.insert_into_product(i[0],i[1].strip(),i[3])
-                m.insert_into_price(i[0],i[2])
-                n=n+1
-		all_price = m.select_from_price_by_product_id(i[0])
-                old_price = 0
-                for j in all_price:
-                    old_price = float(j[0])
-                    break
-                print float(i[2]),old_price
-                if float(i[2]) <= old_price * 80/100:
-                    m.update_from_product_by_product_id(i[0])
-            lock.release()
-        plog("tb product num : %d"%n)
 
-def task_del():
-    while True:
-	sleep(60*24*24*random.random() + 24*60*60)
-        #sleep(60*random.random() + 60)
-	m = Model()
-        plog("start task del......")
-	if lock.acquire():
-	    m.del_from_product_timeout()
-	    m.del_from_price_timeout()		
- 	    lock.release()
-
-lock = threading.Lock()
-t1=threading.Thread(target=task_build)
-t2=threading.Thread(target=task_del)
-t1.setDaemon(True)
-t2.setDaemon(True)
-t1.start()
-t2.start()
-
-if not __name__ == "__main__":    
-    application = app.wsgifunc()
-else:
+def task_web():
     app.run()
+
+if __name__ == "__main__":  
+    s = Process(target=task_spider)
+    w = Process(target=task_web)
+    s.daemon = True
+    w.daemon = True
+    s.start()
+    w.start()
+    s.join() 
+    w.join()
