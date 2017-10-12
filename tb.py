@@ -10,7 +10,7 @@ sys.setdefaultencoding('utf8')
 
 class tbSpider():
     def __init__(self):
-        self.url = "https://s.taobao.com/list?spm=a21bo.50862.201867-links-0.38.7f35a3b33tWAVy&q=%E5%A4%96%E5%A5%97&cat=50344007&style=grid&seller_type=taobao"
+        self.url = "https://s.taobao.com/list?spm=a21bo.50862.201867-links-0.38.7f35a3b33tWAVy&q=%E5%A4%96%E5%A5%97&cat=50344007&style=grid&seller_type=taobao&bcoffset=12&s="
 	#self.url = "http://blog.csdn.net/ljp1205/article/details/77684550"
 	self.depth = 1
 	self.logfile = os.path.join(os.path.dirname(__file__),'./spider.log')
@@ -21,14 +21,20 @@ class tbSpider():
 	#self.key = None
 	os.system('rm -rf '+self.logfile)
 	os.system('rm -rf '+self.dbfile)
-	spider = Spider(self.url,
+	i = 0
+	pages = 10
+	while i < pages:
+	    page_num = i*60 
+	    url_page = self.url + str(page_num)
+	    print url_page
+	    spider = Spider(url_page,
                     self.depth,
                     self.logfile, self.loglevel,
                     self.threads,
                     self.dbfile,
                     self.key)
-	spider.start()
- 
+	    spider.start()
+	    i = i + 1 
     #get product_id,product_name
     def parse_data(self):
 	result1 = []
