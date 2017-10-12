@@ -1,4 +1,4 @@
-$def with (log_content,user,product,count)
+$def with (web_log_content,spider_log_content,user,product,count)
 <div class="row">        
     <div class="col-lg-12"> 
 			<p>系统用户：$count[0]个</p>
@@ -46,8 +46,16 @@ $def with (log_content,user,product,count)
 <hr size=10>
 <div class="row">
     <div class="col-lg-12">
-    <p>系统日志：</p>
-    $for i in log_content
+    <p>web日志：</p>
+    $for i in web_log_content
+        <p>$i</p>
+    </div>
+</div>
+<hr size=10>
+<div class="row">
+    <div class="col-lg-12">
+    <p>spider日志：</p>
+    $for i in spider_log_content
         <p>$i</p>
     </div>
 </div>

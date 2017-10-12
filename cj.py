@@ -157,7 +157,10 @@ class admin:
 	
 	cmd = "tail -100 %s"%os.path.join(curdir,'cj.log')
 	print cmd
- 	log_content = commands.getoutput(cmd).split('\n')
+ 	web_log_content = commands.getoutput(cmd).split('\n')
+	cmd = "tail -100 %s"%os.path.join(curdir,'spider.log')
+        print cmd
+        spider_log_content = commands.getoutput(cmd).split('\n')
 	m = Model()
    	product = m.select_from_product()
         user = m.select_from_user_for_admin()
@@ -166,7 +169,7 @@ class admin:
 	product_count = m.select_rowcount_from_product()
         count.append(user_count)
         count.append(product_count)
-	return render.admin(log_content,user,product,count) 
+	return render.admin(web_log_content,spider_log_content,user,product,count) 
     def POST(self):
 	if sess.username == None or sess.username != "admin@admin":
             raise web.seeother("/index")
@@ -203,9 +206,9 @@ def task_spider():
 	#sleep(60*random.random() + 60)
 	task_del()
 	####################################
-	jd = jdSpider()
-        jd_result = jd.get_all_price()
-	task_insert(jd_result)
+	#jd = jdSpider()
+        #jd_result = jd.get_all_price()
+	#task_insert(jd_result)
 	####################################
         tb = tbSpider()
         tb_result = tb.get_all_price()
