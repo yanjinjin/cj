@@ -1,6 +1,0 @@
-Thu, 28 Sep 2017 16:02:33 connectionpool.py[line:259] INFO Starting new HTTP connection (1): p.3.cn
-Thu, 28 Sep 2017 16:02:33 connectionpool.py[line:390] DEBUG Setting read timeout to None
-Thu, 28 Sep 2017 16:02:33 connectionpool.py[line:430] DEBUG "GET /prices/mgets?skuIds=J_5105026 HTTP/1.1" 302 None
-Thu, 28 Sep 2017 16:02:33 connectionpool.py[line:259] INFO Starting new HTTP connection (1): 10.92.63.254
-Thu, 28 Sep 2017 16:02:33 connectionpool.py[line:390] DEBUG Setting read timeout to None
-Thu, 28 Sep 2017 16:02:33 connectionpool.py[line:430] DEBUG "GET /dynPolLoginRedirect.html HTTP/1.1" 200 None

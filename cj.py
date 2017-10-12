@@ -16,6 +16,9 @@ from verifycode import *
 from weixin import *
 from jd import *
 from tb import *
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
 
 web.config.debug = False
 
@@ -202,8 +205,8 @@ def task_insert(result):
  
 def task_spider():
     while True:
-        sleep(60*60*24*random.random() + 24*60*60)
-	#sleep(60*random.random() + 60)
+        #sleep(60*60*24*random.random() + 24*60*60)
+	sleep(60*random.random() + 60)
 	task_del()
 	####################################
 	#jd = jdSpider()

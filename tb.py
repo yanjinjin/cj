@@ -3,6 +3,9 @@ from spider import *
 import os
 from bs4 import BeautifulSoup
 import json
+import sys
+reload(sys)
+sys.setdefaultencoding('utf8')
 
 class tbSpider():
     def __init__(self):
@@ -35,9 +38,9 @@ class tbSpider():
                     self.dbfile,
                     self.key)
 	all_pages = spider.sql_worker.select_all_pages()
-	for data in all_pages:
-	    print data
-	    g_page_config_s = str(data).find("g_page_config = ")
+	for i in all_pages:
+	    data = str(i)
+	    g_page_config_s = data.find("g_page_config = ")
 	    if g_page_config_s == -1:
 	        return []
 	    g_page_config_e = data[g_page_config_s:].find("}};")
