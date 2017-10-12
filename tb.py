@@ -3,6 +3,7 @@ from spider import *
 import os
 from bs4 import BeautifulSoup
 import json
+import urllib
 import sys
 reload(sys)
 sys.setdefaultencoding('utf8')
@@ -55,7 +56,8 @@ class tbSpider():
 	            result2.append(i["nid"])
 	            result2.append(i["raw_title"])
 	            result2.append(i["view_price"])
-	            result2.append("http:" + i["detail_url"])
+		    url = i["detail_url"].replace('\\u00','%')
+	            result2.append("http:" + urllib.unquote(url))
 	            result1.append(result2)
 	    except:
 	        break
