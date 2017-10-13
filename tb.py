@@ -17,8 +17,8 @@ class tbSpider():
 	self.loglevel = 5
 	self.threads = 1
 	self.dbfile = os.path.join(os.path.dirname(__file__),'./spider.db')
-	self.key = "外套"
-	#self.key = None
+	#self.key = "外套"
+	self.key = None
 	os.system('rm -rf '+self.logfile)
 	os.system('rm -rf '+self.dbfile)
 	i = 0
@@ -49,10 +49,10 @@ class tbSpider():
 	    data = str(i)
 	    g_page_config_s = data.find("g_page_config = ")
 	    if g_page_config_s == -1:
-	        return []
+	        continue
 	    g_page_config_e = data[g_page_config_s:].find("}};")
 	    if g_page_config_e == -1:
-                return []
+                continue
 	    product_info = data[g_page_config_s+16:g_page_config_s+g_page_config_e+2]
 	    try:
 	        p = json.loads(product_info)
@@ -66,7 +66,7 @@ class tbSpider():
 	            result2.append("http:" + urllib.unquote(url))
 	            result1.append(result2)
 	    except:
-	        break
+	        continue
 	return result1
 
     def get_all_price(self):
