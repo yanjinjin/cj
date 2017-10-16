@@ -102,7 +102,7 @@ class Model:
 	return True
     
     def update_from_product_by_product_id(self , product_id):
-	sql = "update %s set is_cj = '1',date = '%s' where product_id = '%s'"%(self.table_product,product_id,datetime.datetime.now().strftime('%Y%m%d'))
+	sql = "update %s set is_cj = '1',date = '%s' where product_id = '%s'"%(self.table_product,datetime.datetime.now().strftime('%Y%m%d'),product_id)
         print sql
         self.conn.execute(""+sql+"")
         self.conn.commit()
