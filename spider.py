@@ -200,7 +200,8 @@ class Spider(object):
                  logfile=None, loglevel=None,
                  threads=1,
                  dbfile=None,
-                 key=''):
+                 key='',
+		 proxys=None):
         """init Spider but will not start automatically.
         param: url If scheme is not specified, http will be used
         param: depth How deep the spider will dive into
@@ -214,6 +215,7 @@ class Spider(object):
         self.logger = self.get_logger(logfile, loglevel)
         self.url_pattern = self.compile_url_pattern()
         self.key = self.get_key_pattern(key)
+	self.proxys = proxys
         self.url = self.get_abs_url(None, url)
         self.depth = depth
         self.tasks_queue = Queue()
@@ -378,13 +380,29 @@ class Spider(object):
         """Get content from page and safely close the connection."""
         try:
 	    time.sleep(2*random.random()+1)#sleep 1~2 good spider
-            req = urllib2.Request(url)
-            # using gzip to accelerate
-            req.add_header('Accept-encoding', 'gzip')
-            req.add_header('User-Agent' , 'Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36')
-	    opener = urllib2.build_opener()
-            page = opener.open(req, None, timeout=30)
-            try:
+            headers = {"Accept-encoding": "gzip","Accept":"text/html","Referer":"http://www.sijitao.net/","User-Agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36"}
+
+            request = Request(url, None, headers)
+            fh = None
+            if self.proxys!=[] and self.proxys!=None:
+                for i in self.proxys:
+                    try:
+                        #p = random.choice(range(0, len(self.proxys)))
+                        dict = {}
+                        dict['http'] = i
+                        print dict
+                        #dict['http']="110.16.80.106:8080"
+                        proxy_handler=urllib2.ProxyHandler(dict)
+                        opener=urllib2.build_opener(proxy_handler)
+                        urllib2.install_opener(opener)
+                        fh = urllib2.urlopen(request, timeout = 20)
+                        break
+                    except:
+                        continue
+            else:
+                fh = urllib2.urlopen(request, timeout = 60 * 2)
+            page = fh.read()
+	    try:
                 result = self.verify_page_headers(page.headers)
                 result['content'] = self.get_page_content(page)
             except Exception, e:
@@ -523,7 +541,8 @@ def main(argv=sys.argv[1:]):
                     logfile=args.logfile, loglevel=args.loglevel,
                     threads=args.thread,
                     dbfile=args.dbfile,
-                    key=args.key)
+                    key=args.key,
+		    proxys=None)
     spider.start()
 
 

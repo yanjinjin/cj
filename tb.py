@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from spider import *
+from spider_proxy import *
 import os
 from bs4 import BeautifulSoup
 import json
@@ -19,10 +20,11 @@ class tbSpider():
 	self.dbfile = os.path.join(os.path.dirname(__file__),'./spider.db')
 	#self.key = "外套"
 	self.key = None
+	self.proxys = getProxys()
 	os.system('rm -rf '+self.logfile)
 	os.system('rm -rf '+self.dbfile)
 	i = 0
-	pages = 10
+	pages = 100
 	while i < pages:
 	    page_num = i*60 
 	    url_page = self.url + str(page_num)
@@ -32,7 +34,8 @@ class tbSpider():
                     self.logfile, self.loglevel,
                     self.threads,
                     self.dbfile,
-                    self.key)
+                    self.key,
+		    self.proxys)
 	    spider.start()
 	    i = i + 1 
     #get product_id,product_name
