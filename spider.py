@@ -382,7 +382,7 @@ class Spider(object):
 	    time.sleep(2*random.random()+1)#sleep 1~2 good spider
             headers = {"Accept-encoding": "gzip","Accept":"text/html","Referer":"http://www.sijitao.net/","User-Agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36"}
 
-            request = Request(url, None, headers)
+            request = urllib2.Request(url, None, headers)
             fh = None
             if self.proxys!=[] and self.proxys!=None:
                 for i in self.proxys:
