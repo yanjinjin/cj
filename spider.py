@@ -1,550 +1,850 @@
-#! /usr/bin/env python
-# -*- coding: utf-8 -*-
-import os
-import sys
-import re
-import copy
+#!/usr/bin/env python
+from Queue import Queue, Empty
 import urllib2
-import sqlite3
-import logging
-import unittest
-import gzip
-import StringIO
-import time
-from Queue import Queue
-from Queue import Empty
-from threading import Thread
-from threading import Timer
-
-import argparse
-from bs4 import BeautifulSoup
+from urllib2 import *
 import requests
+import threading
+from threading import Thread
+import re
+import hashlib
+import urlparse
+import os
+import traceback
+import thread
+from os import path
+from datetime import datetime
+from time import ctime,sleep
+import pickle
+import StringIO
+import gzip
+import signal
 import random
+import gc
+import sys
+reload(sys)
+sys.setdefaultencoding('utf-8')
+
+# for trace memory
 random.seed(0)
 
-class TreadPoolSlot(Thread):
-    def __init__(self, tasks):
-        Thread.__init__(self)
-        self.tasks = tasks
-        self.daemon = True
-        self.idle = True
-        self.logger = logging.getLogger(__name__)
-        self.start()
-
-    def run(self):
-        while True:
-            # wait there
-            func, args, kwargs = self.tasks.get()
-            # oh, lalala, i'm a happy honeybee
-            self.idle = False
-            try:
-                func(*args, **kwargs)
-            except Exception, e:
-                # log here
-                self.logger.error('%s %s' % (e.__class__.__name__, e))
-            # notify the queue this task is done
-            self.tasks.task_done()
-            self.idle = True
+#so i can search keyword debug to remove it
+def debug(msg):
+    print msg
+    
+SAFELOCKER = threading.Lock()
+def safe_print(msg):
+    SAFELOCKER.acquire()
+    print "[%s] %s" % (datetime.now(), msg)
+    SAFELOCKER.release()
+    
+DATEFMT = "%Y-%m-%d %H:%M:%S"
 
 
-class TreadPool(object):
-    """Simple thread pool class using Queue.Queue.
-    Example:
-    tp = TreadPool(10)
-    tp.spawn(os.path.cwd())
-    tp.spawn(os.path.dirname, '.')
-    tp.joinall()
-    """
-    def __init__(self, num):
-        """num: Max threads of this pool."""
-        self.tasks = Queue(num)
-        self.pool = []
-        for i in range(num):
-            self.pool.append(TreadPoolSlot(self.tasks))
+class Job:
+    '''
+    job contains all the information downloader need to know to download
+    '''
+    def __init__(self, url, referer = None, retry_times = 0):
+        self.url = url
+        self.referer = referer
+        self.retry_times = retry_times
 
-    def spawn(self, func, *args, **kwargs):
-        """Spawn the func, note that it will not be start immediately.
-        When a func is spawned, it will wait for a slot to run, or it
-        will be blocked.
-        """
-        self.tasks.put((func, args, kwargs))
+    def get_retry_times(self):
+        return self.retry_times
 
-    def joinall(self):
-        """Wait all spawned tasks to finish."""
-        self.tasks.join()
+    def get_link(self):
+        return self.url
 
-    def undone_tasks(self):
-        """This is not thread safe method.
-        Another thread may call the spawn method, which leading this
-        method to a wrong result. Even in the same thread, the slot
-        may turn into idle when this method is called, but this
-        situation is just a slight unprecise. so you can call it for
-        unprecise environment.
-        """
-        r = 0
-        # for one thread using the thread pool
-        # if all are idle, then undone task is 0
-        # for multi-thread using the thread pool, it's wrong
-        for thread in self.pool:
-            if not thread.idle:
-                r += 1
-        if r:
-            r += self.tasks.qsize()
-        return r
+    def get_referer(self):
+        return self.referer
 
-
-class SQLWorker(Thread):
-    def __init__(self,
-                 dbfile='./spider.db',
-                 in_queue=None,
-                 logger=None):
-        """SQLWorker init method.
-        param: dbfile where to store database, only sqlite3 support
-        param: in_queue where to get data
-        param: logger logger object
-        """
-        Thread.__init__(self)
-        self.daemon = True
-        self.dbfile = dbfile
-        self.in_queue = in_queue
-        self.logger = logger or logging.getLogger(__name__)
-        self.conn = None
-
-    def get_sql_connection(self, dbfile=None, need_table=True):
-        """Get sql connection to dbfile.
-        self.conn may change according to the dbfile
-        If dbfile is none, self.dbfile is used
-        If dbfile does not exist, it will create it init the database.
-        """
-        # already init the connection, just return it
-        if self.conn and not dbfile:
-            return self.conn
-        db = dbfile or self.dbfile
-        # it will create the dbfile if it doesn't exist
-        self.conn = sqlite3.connect(db,check_same_thread=True)
-        if not need_table:
-            return self.conn
-        self.init_table()
-        # close it to make the table available
-        self.conn.close()
-        # reconnect to get sqlite3 object
-        self.conn = sqlite3.connect(db,check_same_thread=True)
-        self.logger.info('Connected to sql done')
-        return self.conn
-
-    def init_table(self, script=None):
-        """Init sqlite3 database table."""
-        conn = self.get_sql_connection(need_table=False)
-        curs = conn.cursor()
-        s = script or """
-                      CREATE TABLE IF NOT EXISTS pages(
-                      url,
-                      content,
-                      last_modified,
-                      etag,
-                      redirect);"""
-        curs.executescript(s)
-        curs.close()
-        self.logger.info('database Initialization done')
-
-    def dump_page(self, page):
-        """Dump a page dict to sql."""
-        conn = self.conn or self.get_sql_connection()
-        curs = conn.cursor()
-        self.logger.debug('dump %s' % page['url'])
-        # avoid sql injection
-        curs.execute('INSERT INTO pages VALUES (?,?,?,?,?);',
-                     (page['url'],
-                      page['content'],
-                      page['lastmodified'],
-                      page['etag'],
-                      page['redirect']))
-        conn.commit()
-        curs.close()
-
-    def select_all_pages(self):
-	conn = self.conn or self.get_sql_connection()
-        curs = conn.cursor()
-	curs.execute('select content from pages;')
-	result = curs.fetchall()
-	curs.close()
-	return result
-
-    def run(self):
-        while True:
-            try:
-                # block for 1 second,
-                # if page is None, then stop
-                page = self.in_queue.get(True, 1)
-                if not page:
-                    self.logger.info('sql worker receive stop signal')
-                    break
-                self.dump_page(page)
-            except Empty, e:
-                continue
-            except Exception, e:
-                self.logger.error('%s %s url=%s' %
-                                  (e.__class__.__name__, e,
-                                   page['url']))
-                break
-        if self.conn:
-	    self.conn.close()
-
-
-class Spider(object):
-    """Simple spider grabs data from the url."""
-
-    def __init__(self,
-                 url,
-                 depth=1,
-                 logfile=None, loglevel=None,
-                 threads=1,
-                 dbfile=None,
-                 key='',
-		 proxys=None):
-        """init Spider but will not start automatically.
-        param: url If scheme is not specified, http will be used
-        param: depth How deep the spider will dive into
-        param: logfile Path to the log file
-        param: loglevel Integer in [1,5]=>[critical,error,warning,
-                        info,debug]
-        param: threads Number of parallel thread to crawl page
-        param: dbfile Path to sqlite3 database file
-        param: key Regular expression to search page content
-        """
-        self.logger = self.get_logger(logfile, loglevel)
-        self.url_pattern = self.compile_url_pattern()
-        self.key = self.get_key_pattern(key)
-	self.proxys = proxys
-        self.url = self.get_abs_url(None, url)
-        self.depth = depth
-        self.tasks_queue = Queue()
-        self.output_queue = Queue()
-        self.pool = TreadPool(threads)
-        self.sql_worker = SQLWorker(dbfile, self.output_queue,
-                                    self.logger)
-        self.progress_urls = []
-        self.status_timer = Timer(10.0, self.print_status)
-
-    def compile_url_pattern(self, pattern=None, verbose=None):
-        """Compile a new url pattern.
-        By default, some valid url will be ignored because i don't
-        want it. i.e. 'home' is valid but will be denied.
-        """
-        if not pattern:
-            pattern = r"""
-                 ^ # match from beginning
-                 (http://|https://) # may starts with http or https
-                 [^\b]+ # following some characters
-                 $ # match the end
-                 """
-            verbose = re.VERBOSE
-        if not verbose:
-            self.url_pattern = re.compile(pattern)
+    def get_joined_link(self):
+        if self.referer == None:
+            return self.url
         else:
-            self.url_pattern = re.compile(pattern, verbose)
-        return self.url_pattern
+            return urlparse.urljoin(self.referer, self.url)
+    
+    def get_id(self):
+        return hashlib.md5(re.sub(r"#.*$", "", self.get_joined_link())).hexdigest() 
 
-    def convert_to_unicode(self, source):
-        """Return converted string from source to unicode string
-        If source cannot be converted, then just return itself.
-        Currently, only support utf-8, gb2312, gbk.
-        """
-        charsets = ('utf-8', 'gb2312', 'gbk')
-        for charset in charsets:
-            try:
-                s = source.decode(charset)
-            except Exception, e:
-                self.logger.debug(
-                    'try to convert from %s to unicode failed. %s' %
-                    (charset, source[:500]))
-                continue
-            return s
-        # this is an error because sqlite3 will stop working
-        self.logger.error('try to convert to unicode failed. %s' %
-                          source[:500])
-        raise Exception('Cannot unicode the content')
+    def __str__(self):
+        return self.url
 
-    def crawl_page(self, url, depth):
-        """Dump all data from url and also his child link.
-        If you want to dump child link, depth should greater than 1.
-        """
-        result = self.get_page(url)
-        if not result:
-            return
-        self.logger.info('get content from %s done' % url)
-        # if depth is done then stop
-        if depth <= 1:
-            return
-        links = self.get_all_links(result['content'])
-        links = self.filter_links(links, url)
-        # put links into queue
-        for link in links:
-            self.tasks_queue.put((link, depth - 1))
+class Utility:
+    @staticmethod
+    def get_local_path(refer, url, is_relative = True):
+        if Utility.is_js_label(url):
+            return url
+        if refer == None:
+            refer = ""
+        url = urlparse.urljoin(refer, url)
+        ret = urlparse.urlparse(url)  
+        
+        path = ret.path
+        if ret.path in ['/', '']:
+            path = '/index.html'
+        elif ret.path[-1] == '/':
+            path = ret.path + 'index.html'
+        query_str = ret.query.replace('?', '-').replace('=', '-').replace('&', '-').replace("://", '-').replace('.', '-')
 
-    def filter_links(self, links, parent=None):
-        """Filter links
-        1. remove fragment
-        2. transform to absolute url
-        3. remove duplicated urls
-        4. remove invalid urls
-        """
-        # remove urls' fragment
-        l = [urllib2.urlparse.urldefrag(link)[0]
-             for link in links]
-        # get urls' absolute url
-        l = [self.get_abs_url(parent, link) for link in l]
-        # remove the reduplicated links
-        l = list(set(l))
-        # remove invalid urls
-        l = [link for link in l if self.is_valid_url(link)]
-        return l
+        if len(url) > 200:
+            query_str = hashlib.md5(query_str).hexdigest() 
 
-    def get_abs_url(self, base, url):
-        """Get absolute address from url based on the base url.
-        Using urllib2.urlparse.urljoin(). Note, the result can be
-        unreachable!
-        If base is not a valid url can be accessed via urllib2, then
-        it will be tread as None.
-        If finally abs url has no scheme, 'http' will be used.
-        Example:
-        return http://a/b if base = http://a/ and url = b
-        return http://b if base = http://a and url = b
-        return http://c if base = http://a/b and url = /c
-        return http://d if base = http://a and url = http://d
-        """
-        # if base is not valid, then this must be called by user
-        if base and not self.is_valid_url(base):
-            self.logger.warn('invalid base url %s' % base)
-            base = None
-        abs_url = urllib2.urlparse.urljoin(base, url)
-        if not self.is_valid_url(abs_url):
-            # only try the http scheme, ignore the https case
-            self.logger.warn('missing scheme for %s, set to http' %
-                             abs_url)
-            pr = urllib2.urlparse.urlparse(abs_url)
-            if not pr.scheme:
-                abs_url = ''.join(('http://', abs_url))
-        return abs_url
+        path_comps = path.split('/')
+        last_piece = path_comps[-1]
 
-    def get_all_links(self, content):
-        """Get all links from content's 'a' tags."""
-        soup = BeautifulSoup.BeautifulSoup(content)
+        if '.' in last_piece:
+            sps = last_piece.rsplit('.', 1)
+
+            if len(sps) == 2:
+                path_comps[-1] = sps[0] + query_str + '.' + sps[1]
+
+         
+        retval = "%s%s" % (ret.netloc.replace('.', '-'), '/'.join(path_comps))
+
+        if not is_relative:
+            return retval
+        else:
+            ref_abs = Utility.get_local_path("", refer, False)
+            return Utility.get_relative_path(ref_abs, retval)
+
+    @staticmethod
+    def get_relative_path(a, b):
+        ''' 
+        b relative to a
+        example:
+        /root/x/1.html; /root/y/2.html
+        the result is ../../y/2.html
+        '''
+        a_parts = a.split("/")
+        b_parts = b.split("/")
+
+        for i in xrange(len(a_parts)):
+            if i >= len(b_parts):
+                break
+            if a_parts[i] != b_parts[i]:
+                break
+        
+        return "../" * (len(a_parts) - i - 1) + "/".join(b_parts[i:])
+
+
+    @staticmethod
+    def is_js_label(url):
+        '''
+        javascript label may exist in src attribute, test for that.
+        '''
+        if url.strip().startswith('javascript:'):
+            return True
+        return False
+
+class Parser:
+    '''
+    parse html, css documents to find urls in them
+    '''
+
+    #href, src, url, import from which an url appears
+    href_regex = re.compile(r"(href\s*=\s*([\"'])([^\"']+)\2)", re.IGNORECASE)
+    src_regex = re.compile(r"(src\s*=\s*([\"'])([^\"']+)\2)", re.IGNORECASE)
+    back_images_regex = re.compile(r"(url\s*\(\s*([\"']*)([^\"'()]+)\2)\)", re.IGNORECASE)
+    css_import_regex = re.compile(r"(@import\s*\(\s*([\"']*)([^\"'()]+)\2)\)", re.IGNORECASE)
+
+    def parse(self, content, url, store_path, c_charset):
+        self.store_path = store_path.rstrip('/')
+        self.content = content
+        self.url = url
+
         links = []
-        for link in soup('a'):
-            for attr in link.attrs:
-                if attr[0] == 'href':
-                    links.append(attr[1].strip())
+        for rx, link_pos in [(Parser.href_regex, 2), (Parser.src_regex, 2), (Parser.back_images_regex, 2), (Parser.css_import_regex, 2)]:
+            links += self.replace_url_in_content(rx, link_pos, c_charset)
+
         return links
 
-    def get_key_pattern(self, key):
-        """Get key pattern, convert to unicode, using re.compile."""
-        if not key:
-            return None
+    def replace_url_in_content(self, regex, link_pos, c_charset):
+        '''
+        file will be store in local disk, so we need to replace the original urls in them with the one using file: schemal
+        '''
+        founded = regex.findall(self.content)
+
+        links = []
+        for fd in founded:
+            full = fd[0]
+            link = fd[link_pos]
+
+            ps_ret = urlparse.urlparse(link)
+            t = urlparse.urlparse(urlparse.urljoin(self.url, link))
+
+            if t.scheme == 'http' or t.scheme == 'https':
+                new_full = full.replace(link, "%s#%s" % (Utility.get_local_path(self.url, link), ps_ret.fragment))
+                self.content = self.content.replace(full, new_full) 
+                #if c_charset:
+                #    link.encode(c_charset)
+                links.append(link)
+
+        return links
+
+    def get_changed_content(self):
+        return self.content
+
+class RememberFailedError(Exception):
+    pass
+
+#Store will make sure that there won't be two thread write to one memery place
+class Memory:
+    '''
+    provide an interface the remember the downloaded files. also we can query if the url has been downloaded from this class
+    '''
+    def __init__(self, memery_place):
+        self.memery_place = path.join(memery_place, ".gwd", "mem")
+        if not path.isdir(self.memery_place):
+            os.makedirs(self.memery_place)
+    def remember(self, job, links):
+        '''
+        remember the downloaded urls
+        '''
+        f = None
         try:
-            unicode_key = self.convert_to_unicode(key)
-        except Exception, e:
-            msg = 'unrecognized searching key encoding, set to none.'
-            msg = '%s %s' % (msg, e)
-            self.logger.error(msg)
-            return None
-        else:
-            return re.compile(unicode_key)
-
-    def get_logger(self, logfile, loglevel):
-        """Return a logger named class.name.
-        if logfile is None, it will output to console.
-        if loglevel is an integer of [1,5], more details if larger.
-        """
-        logger = logging.getLogger(__name__)
-        if not logfile:
-            log_handler = logging.StreamHandler()
-        else:
-            log_handler = logging.FileHandler(logfile)
-        formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        log_handler.setFormatter(formatter)
-        ll = (logging.CRITICAL,
-              logging.ERROR,
-              logging.WARNING,
-              logging.INFO,
-              logging.DEBUG)
-        if not loglevel in range(1, 6):
-            loglevel = 5
-        logger.setLevel(ll[loglevel - 1])
-        log_handler.setLevel(ll[loglevel - 1])
-        logger.addHandler(log_handler)
-        return logger
-
-    def get_page(self, url):
-        """Get content from page and safely close the connection."""
-        try:
-	    time.sleep(2*random.random()+1)#sleep 1~2 good spider
-            headers = {"Accept-encoding": "gzip","Accept":"text/html","Referer":"http://www.sijitao.net/","User-Agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36"}
-
-            request = urllib2.Request(url, None, headers)
-            fh = None
-            if self.proxys!=[] and self.proxys!=None:
-                for i in self.proxys:
-                    try:
-                        #p = random.choice(range(0, len(self.proxys)))
-                        dict = {}
-                        dict['http'] = i
-                        print dict
-                        #dict['http']="110.16.80.106:8080"
-                        proxy_handler=urllib2.ProxyHandler(dict)
-                        opener=urllib2.build_opener(proxy_handler)
-                        urllib2.install_opener(opener)
-                        fh = urllib2.urlopen(request, timeout = 20)
-                        break
-                    except:
-                        continue
-            else:
-                fh = urllib2.urlopen(request, timeout = 60 * 2)
-            page = fh.read()
-	    try:
-                result = self.verify_page_headers(page.headers)
-                result['content'] = self.get_page_content(page)
-            except Exception, e:
-                page.close()
-                raise e
-            result['url'] = url
-            # this url has been redirected, what's up?
-            if hasattr(page, 'url'):
-                result['redirect'] = page.url
-            else:
-                result['redirect'] = ''
-            page.close()
-            # if key is defined, then only dump page contains key
-            if self.key:
-                if self.key.search(result['content']):
-                    self.output_queue.put(result)
-            else:
-                self.output_queue.put(result)
-        # ignore any exception, just log it, and return None
-        except Exception, e:
-            self.logger.error(
-                'url %s is unreachable. Exception %s %s' %
-                (url, e.__class__.__name__, e))
-            result = None
-	    time.sleep(5*random.random()+1)#sleep 1~5 good spider
-        return result
-
-    def get_page_content(self, page):
-        """Get content from page.
-        raise Exception if can't convert content to unicode
-        """
-        # unpack gzip file
-        if page.headers.get('content-encoding', '') == 'gzip':
-            page_content = page.read()
-            fileobj = StringIO.StringIO(page_content)
-            zipfile = gzip.GzipFile(fileobj=fileobj)
-            content = zipfile.read()
-        else:
-            content = page.read()
-        # try to convert to unicode because i don't want to kill
-        # sqlite3 and myself
-        content = self.convert_to_unicode(content)
-        return content
-
-    def is_valid_url(self, url):
-        """Verify if the url can be searched by url_pattern attr."""
-        return True if self.url_pattern.search(url) else False
-
-    def print_status(self):
-        """Print status of time and undone tasks."""
-        undone_urls = self.tasks_queue.qsize()
-        undone_urls += self.pool.undone_tasks()
-        print 'current time: %s' % time.strftime('%Y-%m-%d %H:%M:%S'),
-        print 'unprocessed count of urls = %d' % undone_urls
-        # yoho, another timer, i always like the new one
-        self.status_timer = Timer(10.0, self.print_status)
-        self.status_timer.start()
-
-    def start(self):
-        """Start to crawl page"""
-        print 'start at %s' % time.strftime('%Y-%m-%d %H:%M:%S')
-        self.logger.info('task start from %s with depth %s' %
-                         (self.url, self.depth))
-        self.sql_worker.start()
-        self.status_timer.start()
-        self.tasks_queue.put((self.url, self.depth))
-        try:
-            while True:
-                try:
-                    # block for 1 second
-                    url, depth = self.tasks_queue.get(True, 1)
-                except Empty, e:
-                    # oops, some task is not done yet
-                    if self.pool.undone_tasks():
-                        # go back to work, fool!
-                        continue
-                    # oh, great, i can stop
-                    else:
-                        # tell the sql worker that he can go home
-                        self.output_queue.put(None)
-                        # break out to finally block
-                        break
-                # avoid reduplicated urls
-                if not url in self.progress_urls:
-                    self.pool.spawn(self.crawl_page, *(url, depth))
-                    self.progress_urls.append(url)
-        except Exception, e:
-            self.logger.critical('%s %s' % (e.__class__.__name__, e))
+            f = open(self.get_memery_place(job), 'w')
+            for link in links:
+                new_job = Job(link, job.get_joined_link())
+                f.write(("%s\n" % new_job.get_joined_link()))
+        except IOError, e:
+            raise RememberFailedError(e)
         finally:
-            # block for all pool slot done
-            self.pool.joinall()
-            # block for sql dump
-            self.sql_worker.join()
-            # stop timer
-            self.status_timer.cancel()
-            print 'stop at %s' % time.strftime('%Y-%m-%d %H:%M:%S')
-            print 'process url count=%d' % len(self.progress_urls)
-            self.logger.info('task done!')
+            if f != None:
+                f.close()
 
-    def verify_page_headers(self, headers):
-        """Verify some information of a page's headers.
-        Including page's etag, last-modified
-        raise Exception if the page is not text file
-        """
-        result = {}
-        # ignore non-text file
-        content_type = headers.get('Content-Type', '')
-        if not content_type.startswith('text'):
-            raise Exception('invalid content-type')
-        result['etag'] = headers.get('ETag', '')
-        result['lastmodified'] = headers.get('Last-Modified', '')
-        return result
+    def remembered(self, job):
+        '''
+        query if the url(job) has been downloaded(done)
+        '''
+        f = None
+        try:
+            mem_place = self.get_memery_place(job)
+
+            if not os.path.isfile(mem_place):
+                return None
+            f = open(mem_place, 'r')
+            content = f.read().rstrip("\n")
+
+            if content:
+                links = content.split("\n")
+            else:
+                links = []
+
+            jobs = []
+            for link in links:
+                jobs.append(Job(link, ""))
+            return jobs
+        except IOError, e:
+            raise RememberFailedError(e)
+        finally:
+            if f != None:
+                f.close()
+
+    def get_memery_place(self, job):
+        return path.join(self.memery_place, job.get_id())
+
+class Processer:
+    def do_process(self, job, c_t, c_charset, content):
+        pass
+
+class SaveFileProcesser(Processer):
+    def __init__(self, store):
+        self.store = store
+
+    def do_process(self, job, c_t, c_charset, content):
+        localpath = Utility.get_local_path(job.get_referer(), job.get_link(), False)
+        localpath = os.path.join(self.store.get_store_path(), localpath) 
+
+        dir = os.path.dirname(localpath)
+        file_name = os.path.basename(localpath)
+
+        if not os.path.isdir(dir):
+            os.makedirs(dir, 0755)
+
+        f = None
+        try:
+            f = open(localpath, 'w+')
+            #if c_charset != None:
+            #    f.write(content.encode(c_charset))
+            #else:
+            #    f.write(content)
+
+            f.write(content)
+
+        except IOError:
+            safe_print("can't write to %s" % localpath)
+        finally:
+            if f != None:
+                f.close()
+
+class Downloader:
+    '''
+    contains the logic to download from an url
+    '''
+    '''white_lists =  ['text/html', 'text/css', 'text/plain', \
+                    'text/xml', 'text/javascript', 'image/png', \
+                    'image/gif', 'image/jpeg', 'application/x-javascript', \
+                    'application/xml', 'application/javascript', \
+                    "application/json"]
+    '''
+    white_lists =  ['text/html','text/xml','text/csv']
+
+    """download from an url, it will download all files related with this url"""
+    def __init__(self, store, mem_inst):
+        self.store = store
+        self.parser = Parser()
+        self.mem_inst = mem_inst
+        self.exit = False
+        self.processer = SaveFileProcesser(self.store)
+        #self.processer = ExtractBookProcesser(self.store.get_store_path() + "/__book__")
+
+    def kill(self):
+        self.exit = True
+
+    def download(self):
+        '''
+        download routine
+        '''
+        while not (self.exit or DHManager.all_is_done):
+            try:
+                job = self.store.get()
+            except Empty, e:
+        	time.sleep(1)
+	        continue
+
+            #print job
+            if Utility.is_js_label(job.get_link()):
+                self.store.task_done()
+                continue
 
 
-def main(argv=sys.argv[1:]):
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-u', '--url',
-                        help='valid url for spider')
-    parser.add_argument('-d', '--depth',
-                        type=int, default=1,
-                        help='depth in [1, 3) for spider')
-    parser.add_argument('-f', '--logfile', default='./spider.log',
-                        help='log file path')
-    h = 'log level in [1,5], more detail for larger number'
-    parser.add_argument('-l', '--loglevel', help=h,
-                        type=int, choices=range(1, 6), default=5)
-    parser.add_argument('--testself', action='store_true',
-                        help='program self test')
-    parser.add_argument('--thread', type=int, default=10,
-                        help='parallel thread to grab data')
-    parser.add_argument('--dbfile',default = './spider.db', help='file path for sqlite')
-    parser.add_argument('--key', help='filter key for page content')
-    args = parser.parse_args(argv)
-    spider = Spider(url=args.url,
-                    depth=args.depth,
-                    logfile=args.logfile, loglevel=args.loglevel,
-                    threads=args.thread,
-                    dbfile=args.dbfile,
-                    key=args.key,
-		    proxys=None)
-    spider.start()
+            mem_jobs = self.mem_inst.remembered(job)
+            if mem_jobs != None:
+                try:
+                    for mem_job in mem_jobs:
+                        self.store.put(mem_job)
+                    continue
+                except RememberFailedError, e:
+                    raise e
+                finally:
+                    self.store.mark_as_done(job)
+                    self.store.task_done()
 
+            link = job.get_joined_link()
+            try:
+                bechmark_start = datetime.now()
+                c, c_t, c_charset = self.get_content(job)
+                bechmark_end = datetime.now()
+                safe_print("[%d]download %s, takes %s" % (self.store.qsize(), link, bechmark_end - bechmark_start))
+
+                if c_t in ['text/html', 'text/css']:
+                    links = self.parser.parse(c, link, self.store.get_store_path(), c_charset)
+                    c = self.parser.get_changed_content()
+                else:
+                    links = []
+
+                self.processer.do_process(job, c_t, c_charset, c);
+
+                self.mem_inst.remember(job, links)
+                for lk in links:
+                    self.store.put(Job(lk, link))
+                
+                self.store.mark_as_done(job)
+
+            except URLError, e:
+                safe_print("can't down load from %s %s" % (link, e))
+                
+                if job.get_retry_times() < 10:
+                    new_job = Job(link, link, job.get_retry_times() + 1) 
+                    self.store.put(new_job)
+                else:
+                    self.mem_inst.remember(job, links)
+                    self.store.mark_as_done(job)
+                    safe_print("exceed 10 retry times")
+                    #os._exit(1)
+            except RememberFailedError, e:
+                raise e
+            except Exception, e:
+                if str(e) == "timed out" and job.get_retry_times() < 100:
+                    self.store.put(Job(link, link))
+                else:
+                    safe_print("exceed 100 retry times")
+                    #os._exit(1)
+                safe_print("error happended %s, url %s" % (e, link))
+                traceback.print_exc()
+                #continue
+            finally:
+                self.store.task_done()
+		time.sleep(2*random.random()+1)#sleep 1~2 good spider
+		safe_print("one task download over")
+
+    def __ungzip(self, content):
+        cs = StringIO.StringIO(content)
+        gzipper = gzip.GzipFile(fileobj=cs)
+        return gzipper.read()
+            
+    def get_content(self, job):
+        '''
+        use urllib to download the file
+        '''
+        url = job.get_joined_link()
+        headers = {"Accept":"text/html","Referer":"http://www.sijitao.net/","User-Agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36"}
+
+        request = Request(url, None, headers)
+	fh = None
+	if self.store.proxys!=[] and self.store.proxys!=None:
+	    for i in self.store.proxys:
+		try:
+		    #p = random.choice(range(0, len(self.store.proxys)))
+                    dict = {}
+                    dict['http'] = i
+                    print dict
+                    #dict['http']="110.16.80.106:8080"
+                    proxy_handler=urllib2.ProxyHandler(dict)
+                    opener=urllib2.build_opener(proxy_handler)
+                    urllib2.install_opener(opener)
+                    fh = urllib2.urlopen(request, timeout = 20)
+		    break
+	        except:		
+		    continue
+        else:
+	    fh = urllib2.urlopen(request, timeout = 60 * 2)
+        content = fh.read()
+	#content = requests.get(url,headers = headers,proxies = dict,timeout = 30)
+        ct = fh.headers['Content-Type']
+        match = re.match(r'(.*);', ct)
+
+        if match != None:
+            con_type = match.groups()[0]
+        else:
+            if 'charset' not in ct:
+                con_type = ct.rstrip(';')
+            else:   
+                con_type = ct
+
+        if ('Content-Encoding' in fh.headers) and (con_type == 'text/html'):
+            if fh.headers['Content-Encoding'] == 'gzip':
+                content = self.__ungzip(content)
+
+        print ct
+        con_charset = None
+        if con_type == "text/html" or con_type == "text/css":
+            match = re.search(r'charset=([^"]+)', ct)
+            if match:
+                con_charset = match.groups()[0].lower()
+            elif con_type == "text/html":
+                match = re.search(r'[\t ]+charset=(["\']?)([^"\']+)\1', content)
+                if match:
+                    con_charset = match.groups()[1].lower()
+
+            if con_charset == None:
+                con_charset = "utf-8"
+            #content = content.decode(con_charset)
+
+        if con_type in Downloader.white_lists:
+            return (content, con_type, con_charset)
+        else:
+            safe_print(con_type)
+            return ("", con_type, con_charset)
+
+class Filter:
+    '''
+    tell us what kind of file should be downloaded and what should not be
+    '''
+    def __init__(self):
+        self.ft = set()
+
+    def add_filter(self, *args):
+        '''
+        add filter rules
+        '''
+        for filter in args:
+            self.ft.add(filter)
+
+    def passed(self):
+        '''
+        check if passed
+        '''
+        if len(self.ft) == 0:
+            return True
+        else:
+            return False
+
+class WhiteList(Filter):
+    def passed(self, url):
+        if  Filter.passed(self):
+            return True
+
+        else:
+            for filter in self.ft:
+                if re.search(filter, url):
+                    return True
+            return False
+
+class BlackList(Filter):
+    def passed(self, url):
+        if  Filter.passed(self):
+            return True
+
+        else:
+            for filter in self.ft:
+                if re.search(filter, url):
+                    return False
+            return True
+
+class StoreError(Exception):
+    pass
+
+class Checker:
+    MAX_POOL_SIZE = 1024 * 10
+    def __init__(self, checker_place):
+
+        self.checker_place = path.join(checker_place, ".gwd", "checker")
+        if not path.isdir(self.checker_place):
+            os.makedirs(self.checker_place)
+
+        self.mutex = threading.Lock()  
+        self.pool = set()
+        self.second_pool = set()
+        self.cur_file_num = -1
+        self.file_base_name = "checker_file_"
+    def add(self, v):
+        if self.check(v):
+            return
+
+        try:
+            self.mutex.acquire()
+
+            if len(self.pool) >= Checker.MAX_POOL_SIZE / len(v):
+                if len(self.second_pool) != 0:
+                    self.__dump_pool(self.second_pool)
+                    gc.collect()
+            
+                self.second_pool = self.pool
+                self.pool = set()
+
+            self.pool.add(v)
+        finally:
+            self.mutex.release()
+
+    def check(self, v):
+        try:
+            self.mutex.acquire()
+
+            if v in self.pool or v in self.second_pool:
+                return True
+            if self.cur_file_num == -1:
+                return False
+
+            for i in xrange(self.cur_file_num, -1, -1):
+                p = self.__load_pool(i)
+                if v in p:
+                    return True
+
+            return False
+        finally:
+            self.mutex.release()
+
+    def __load_pool(self, num):
+        f = open(self.__get_file_path(num), 'r')
+        ret = pickle.load(f)
+        f.close()
+        return ret
+
+    def __dump_pool(self, p):
+        self.cur_file_num += 1
+
+        f = open(self.__get_file_path(self.cur_file_num), 'w')
+        pickle.dump(p, f, pickle.HIGHEST_PROTOCOL)
+        f.close()
+
+    def __get_file_path(self, num):
+        return path.join(self.checker_place, "%s%d" % (self.file_base_name, num))
+
+class Store(Queue):
+    '''
+    a wrapper class to Queue.Queue, so we can control the get and put process
+    '''
+    def __init__(self, proxys , store_path):
+        Queue.__init__(self)
+	self.proxys = proxys
+        self.store_path = store_path
+        self.whitelist = WhiteList()
+        self.blacklist = BlackList()
+
+        self.checker = Checker(store_path)
+
+    def put(self, job):
+        if self.pass_filters(job):
+            Queue.put(self, job)
+
+    def get(self):
+        while True:
+            '''
+            if Queue.empty(self):
+                raise StoreEmptyError()
+            '''
+
+            job = Queue.get(self, True, 0.01)
+
+            if not self.checker.check(job.get_id()):
+                return job
+            else:
+                self.task_done()
+
+    def mark_as_done(self, job):
+        self.checker.add(job.get_id())
+
+    def get_store_path(self):
+        return self.store_path
+
+    def add_filter(self, t, *args):
+        for arg in args:
+            if arg == "{image}":
+                t.add_filter("\.(jpg|jpeg|gif|png)([?#]|$)")
+            elif arg == "{css}":
+                t.add_filter("\.css([?#]|$)")
+            elif arg == "{javascript}":
+                t.add_filter("\.js([?#]|$)")
+            else:
+                t.add_filter(arg)
+
+    def add_white_filter(self, *args):
+        self.add_filter(self.whitelist, *args);
+
+    def add_black_filter(self, *args):
+        self.add_filter(self.blacklist, *args);
+
+    def pass_filters(self, job):
+        link = job.get_joined_link()
+        if self.blacklist.passed(link):
+            if self.whitelist.passed(link):
+                return True
+            else:
+                return False
+        else:
+            return False
+
+class DH(threading.Thread):
+    '''
+    download thread
+    '''
+    def __init__(self, store, mem_inst):
+        Thread.__init__(self)
+        self.downloader = Downloader(store, mem_inst)
+        
+    def run(self):
+        try:
+            self.downloader.download()
+        except Exception, e:
+            safe_print(e)
+            traceback.print_exc()
+            thread.exit()
+
+    def kill(self):
+        self.downloader.kill()
+
+class JoinThread(threading.Thread):
+    def __init__(self, store):
+        Thread.__init__(self)
+        self.daemon = True
+        self.store = store
+        
+    def run(self):
+        self.store.join()
+        DHManager.all_is_done = True
+
+class DHManager:
+    '''
+    manage download thread. try to brint up exited download thread if the total downloading job is not finished yet
+    '''
+    bringup_time = 30
+    all_is_done = False
+    def __init__(self, store, mem_inst, th_count):
+        self.dhs = []
+        self.original_count = th_count
+        self.first_die_time = None
+        self.store = store
+        self.mem_inst = mem_inst
+        self.exit = False
+        self.killcmd_issued = False
+        self.join_th = JoinThread(self.store)
+
+        for i in range(0, th_count):
+            self.dhs.append(DH(store, mem_inst))
+            self.dhs[-1].start()
+
+        self.join_th.start()
+
+        safe_print("At %s, we are now downloading..." % (datetime.now().strftime(DATEFMT)))
+
+    def wait_for_all_exit(self):
+        while True:
+            if len(self.dhs) == 0:
+                break
+
+            if self.first_die_time != None and (datetime.now() - self.first_die_time).seconds > DHManager.bringup_time:
+                for i in range(len(self.dhs), self.original_count):
+                    self.dhs.append(DH(self.store, self.mem_inst))
+                    self.dhs[-1].start()
+                self.first_die_time = None
+
+            for dh in self.dhs:
+                if not dh.is_alive():
+                    self.dhs.remove(dh)
+                    if self.first_die_time == None:
+                        self.first_die_time = datetime.now()
+    
+            time.sleep(0.1)
+
+    def kill(self):
+        for dh in self.dhs:
+            dh.kill()
+
+        safe_print("%d thread need to be killed, please wait." % len(self.dhs))
+
+        while True:
+            for dh in self.dhs:
+                if not dh.is_alive():
+                    self.dhs.remove(dh)
+                    sys.stdout.write(".")
+
+            if len(self.dhs) == 0:
+                break
+            time.sleep(0.0001)
+        
+        safe_print("done")
+
+class Spider:
+    def __init__(self, url ,proxys, download_path):
+        #signal.signal(signal.SIGINT, self.on_sigint)
+	self.url = url
+	self.start_time = datetime.now()
+	self.proxys = proxys
+        self.download_path = download_path
+        try:
+            self.store = Store(self.proxys , self.download_path)
+        except StoreError, e:
+            safe_print(e)
+            sys.exit(1)
+	
+	self.store.add_black_filter("{image}", "\.css", "\.js","\.ico"
+					"\.png","\.jpg","\.jpeg","\.gif")	
+
+    def set_white(self,filter):
+	self.store.add_white_filter(filter)
+    
+    def set_black(self,filter):
+	self.store.add_black_filter(filter)
+
+    def run(self):
+	self.store.put(Job(self.url))
+	mem_inst = Memory(self.download_path)
+	dh_manager = None
+        try:
+            dh_manager = DHManager(self.store, mem_inst, 30)
+            dh_manager.wait_for_all_exit()
+        except KeyboardInterrupt:
+            if dh_manager != None:
+                dh_manager.kill() 		
+    	self.end_time = datetime.now()
+        safe_print("download finished, takes %s" % (self.end_time - self.start_time))
+
+    def __del__(self):
+	pass
+    def on_sigint(self,signum, frame):
+        os._exit(signum)
+
+class spider_parse:
+    def __init__(self):
+	file = "download"
+        dir = os.path.join(os.path.dirname(__file__),file)
+	self.real_dir = dir
+    
+    def is_domain(self,url):
+        pattern = re.compile(r'(?i)^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$')
+        match = pattern.match(url)
+        if match:
+            return True
+        else:
+            return False
+
+    def parse_url(self,data):
+	result=[]
+	return result
+    
+    def get_all_file(self,filepath,filelist):
+        for file in os.listdir(filepath):
+            real_file=os.path.join(filepath,file)
+            if os.path.isfile(real_file):
+		print real_file
+                filelist.append(real_file)
+	    elif os.path.isdir(real_file):
+		self.get_all_file(real_file,filelist)
+        return filelist
+
+    def parse_data(self):
+	result=[]
+	filelist=[]
+	self.get_all_file(self.real_dir,filelist)
+	for file in filelist:
+	    print file
+	    file_object = open(file, 'r')
+            try:
+                data = file_object.read()
+		result+=self.parse_url(data)
+	    finally:
+            	file_object.close()
+	return result         
+
+class Spider_one(object):
+    def __init__(self,url):
+	print "spider start"
+	self.rescode = 0
+	self.html = None
+	self.result = []
+	self.url = url
+	self.res = None
+	print "start connect...."
+        try:
+            socket.setdefaulttimeout(2)
+            req = urllib2.Request(url)
+	    req.add_header('Referer', 'http://tieba.baidu.com/')
+            req.add_header('User-Agent',"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36")
+	    self.res = urllib2.urlopen(req)
+	    self.rescode = self.res.getcode()
+	    self.html =  self.res.read()
+	except urllib2.URLError, e:
+	    self.html = None
+	    print e.reason
+	    print "connect failed"+url	
+   	    pass
+ 
+    def get_rescode(self):
+	#200
+	return self.rescode
+
+    def get_html(self):
+	return self.html
+
+    def parse_html(self):
+	return self.html
+
+    def __del__(self):
+        print "spider over"
+	if self.res!=None:
+	    self.res.close()
+	    del self.res
 
 if __name__ == '__main__':
-    main()
+    url = "https://www.cnblogs.com/"
+    print url
+    s = Spider_one(url)
+    result=s.parse_html()
+    print result
+
+    s=Spider(url,"download")
+    s.set_white("www\.cnblogs\.com")
+    s.set_black('\.xml')
+    s.run()

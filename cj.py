@@ -206,7 +206,7 @@ def task_insert(result):
 def task_spider():
     while True:
         #sleep(60*60*24*random.random() + 24*60*60)
-	sleep(60*random.random() + 60)
+	sleep(10*random.random() + 6)
 	task_del()
 	####################################
 	#jd = jdSpider()
