@@ -12,7 +12,9 @@ see apache_phishing.conf
 #close selinux
 setenforce 0
 #beautifulsoup 
-apt-get install Python-bs4
+pip install bs4
+#PIL
+yum install python-imaging
 
 version
 1.0
