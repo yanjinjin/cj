@@ -209,12 +209,10 @@ def task_spider():
 	sleep(10*random.random() + 6)
 	task_del()
 	####################################
-	#jd = jdSpider()
-        #jd_result = jd.get_all_price()
+        #jd_result = get_all_price()
 	#task_insert(jd_result)
 	####################################
-        tb = tbSpider()
-        tb_result = tb.get_all_price()
+        tb_result = get_all_tb_price()
 	task_insert(tb_result)
 	####################################
 
