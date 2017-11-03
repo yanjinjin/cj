@@ -787,7 +787,10 @@ class spider_parse:
     def parse_data(self):
 	result=[]
 	filelist=[]
-	self.get_all_file(self.real_dir,filelist)
+	try:
+	    self.get_all_file(self.real_dir,filelist)
+	except:
+	    return result
 	for file in filelist:
 	    print file
 	    file_object = open(file, 'r')
