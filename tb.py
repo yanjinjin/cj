@@ -10,7 +10,7 @@ reload(sys)
 sys.setdefaultencoding('utf8')
 
 class tbSpider(spider_parse):
-    def __init__(self,url,prosys):
+    def __init__(self,url,proxys):
 	file = "download/"
         dir = os.path.join(os.path.dirname(__file__),file)
         self.real_dir = os.path.join(dir , "s-taobao-com")
