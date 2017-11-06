@@ -82,6 +82,8 @@ class index:
     def POST(self):
 	search = web.input()	
 	product_name = search.get('product_name')
+	if product_name == None:
+	    raise web.seeother('index')
 	m = Model()
         result = m.select_from_product_by_product_name(product_name)
 	return render.index(result)	
@@ -94,6 +96,8 @@ class detail:
             plog("%s view detail "%sess.username)
 	search = web.input()
         product_id = search.get('product_id')
+	if product_id == None:
+	     raise web.seeother('index')
 	m = Model()
         result = m.select_from_price_by_product_id(product_id)
 	categories = ""
@@ -116,7 +120,9 @@ class register:
         passwd2 = search.get('password2')
         verifycode = search.get('verifycode')
         verifycode_hidden = search.get('verifycode_hidden')
-        if passwd1 != passwd2:
+	if username == None or passwd1 == None or passwd2 == None or verifycode == None or verifycode_hidden == None:
+            raise web.seeother('index')
+	if passwd1 != passwd2:
             return render.message("registererr-passwd")
         if verifycode.lower() != verifycode_hidden.lower():
             return render.message("registererr-verify")
@@ -133,7 +139,9 @@ class login:
         search = web.input()
         username = search.get('username')
         passwd = search.get('password')
-        m = Model()
+        if username == None or passwd == None:
+	    return render.message("loginerr")  
+	m = Model()
         result = m.select_rowcount_from_user_by_login(username,passwd)
         if result ==1:
             sess.username=username
@@ -206,7 +214,7 @@ def task_insert(result):
 def task_spider():
     while True:
         #sleep(60*60*24*random.random() + 24*60*60)
-	sleep(10*random.random() + 6)
+	sleep(60*60*random.random() + 60)
 	task_del()
 	####################################
         #jd_result = get_all_price()

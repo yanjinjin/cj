@@ -52,7 +52,7 @@ def extractIPAddress(content):
 
 def getProxys():
     """ main function. """
-    Url = 'http://www.xicidaili.com/wt/1'   # assign relevant url
+    Url = 'http://www.xicidaili.com/nn/1'   # assign relevant url
     content = getContent(Url)               # achieve html content
     proxys = extractIPAddress(content)      # achieve proxys
     return proxys
