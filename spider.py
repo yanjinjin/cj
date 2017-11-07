@@ -383,7 +383,6 @@ class Spider(object):
             headers = {"Accept-encoding": "gzip","Accept":"text/html","Referer":"http://www.sijitao.net/","User-Agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36"}
 
             request = urllib2.Request(url, None, headers)
-            fh = None
             if self.proxys!=[] and self.proxys!=None:
                 for i in self.proxys:
                     try:
@@ -395,13 +394,12 @@ class Spider(object):
                         proxy_handler=urllib2.ProxyHandler(dict)
                         opener=urllib2.build_opener(proxy_handler)
                         urllib2.install_opener(opener)
-                        fh = urllib2.urlopen(request, timeout = 20)
+                        page = urllib2.urlopen(request, timeout = 20)
                         break
                     except:
                         continue
             else:
-                fh = urllib2.urlopen(request, timeout = 60 * 2)
-            page = fh.read()
+                page = urllib2.urlopen(request, timeout = 60 * 2)
 	    try:
                 result = self.verify_page_headers(page.headers)
                 result['content'] = self.get_page_content(page)
