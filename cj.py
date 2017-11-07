@@ -214,13 +214,14 @@ def task_insert(result):
 def task_spider():
     while True:
         #sleep(60*60*24*random.random() + 24*60*60)
-	sleep(60*60*random.random() + 60)
+	sleep(60*random.random() + 60)
 	task_del()
 	####################################
         #jd_result = get_all_price()
 	#task_insert(jd_result)
 	####################################
-        tb_result = get_all_tb_price()
+	tb = tbSpider()
+        tb_result = tb.get_all_price()
 	task_insert(tb_result)
 	####################################
 
