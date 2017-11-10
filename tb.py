@@ -28,7 +28,8 @@ class tbSpider():
 	    i = 0
 	    while i < pages:
 		page_num = i*60 
-		url_page = "https://s.taobao.com/list?q="+product+"&style=grid&seller_type=taobao&bcoffset=12&s=" + str(page_num)
+		url_page = "https://s.taobao.com/search?initiative_id=tbindexz_20170306&ie=utf8&spm=a21bo.2017.201856-taobao-item.2&sourceId=tb.index&search_type=item&ssid=s5-e&commend=all&imgfile=&q="+urllib.quote(product)+"&suggest=0_9&_input_charset=utf-8&s="+str(page_num)
+		#url_page = "https://s.taobao.com/list?q="+urllib.quote(product)+"&style=grid&seller_type=taobao&bcoffset=12&s=" + str(page_num)
 		print url_page
 		spider = Spider(url_page,
 					self.depth,
