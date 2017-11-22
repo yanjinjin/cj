@@ -380,7 +380,7 @@ class Spider(object):
         """Get content from page and safely close the connection."""
         try:
 	    time.sleep(2*random.random()+1)#sleep 1~2 good spider
-            headers = {"Accept-encoding": "gzip","Accept":"text/html","Referer":"http://www.sijitao.net/","User-Agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36"}
+            headers = {"Accept-encoding": "gzip","Accept":"text/html","Referer":"https://tieba.baidu.com","User-Agent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/32.0.1667.0 Safari/537.36"}
 
             request = urllib2.Request(url, None, headers)
             if self.proxys!=[] and self.proxys!=None:
@@ -391,11 +391,12 @@ class Spider(object):
                         dict['http'] = i
                         print dict
                         #dict['http']="110.16.80.106:8080"
-                        proxy_handler=urllib2.ProxyHandler(dict)
-                        opener=urllib2.build_opener(proxy_handler)
-                        urllib2.install_opener(opener)
-                        page = urllib2.urlopen(request, timeout = 20)
-                        break
+                        #proxy_handler=urllib2.ProxyHandler(dict)
+                        #opener=urllib2.build_opener(proxy_handler)
+                        #urllib2.install_opener(opener)
+                        #page = urllib2.urlopen(request, timeout = 20)
+                        page = urllib2.urlopen(request,  proxies=dict, timeout = 20)
+			break
                     except:
                         continue
             else:
