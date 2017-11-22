@@ -44,8 +44,9 @@ class tbSpider():
                 result = self.spider.get_page(url_page)
 		
                 i = i + 1
-
-		data = str(result)
+		if result == None:
+                    continue
+                data = result['content']
 		g_page_config_s = data.find("g_page_config = ")
 		if g_page_config_s == -1:
 		    return result1

@@ -52,9 +52,14 @@ def extractIPAddress(content):
 
 def getProxys():
     """ main function. """
-    Url = 'http://www.xicidaili.com/nn/1'   # assign relevant url
-    content = getContent(Url)               # achieve html content
-    proxys = extractIPAddress(content)      # achieve proxys
+    proxys = []
+    i=1
+    while i<10:
+        Url = 'http://www.xicidaili.com/nn/'+str(i)   # assign relevant url
+  	print Url    
+	content = getContent(Url)               # achieve html content
+        proxys = proxys + extractIPAddress(content)      # achieve proxys
+        i = i+1
     return proxys
 if  __name__ == "__main__":
     print getProxys()
