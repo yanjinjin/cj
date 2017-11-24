@@ -108,7 +108,7 @@ class detail:
 	    series = series + i[0] + ","
 	product = m.select_from_product_by_product_id(product_id)
 	return render.detail(categories.strip(","),series.strip(","),product)	
-
+'''
 class register:
     def GET(self):
         vc = Verifycode()
@@ -131,7 +131,7 @@ class register:
             return render.message("registererr-username")
         m.insert_into_user(username,passwd1)
         return render.message("registerok")
-
+'''
 class login:
     def GET(self):
         return render.login()

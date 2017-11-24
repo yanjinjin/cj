@@ -400,6 +400,7 @@ class Spider(object):
                     except:
                         continue
             else:
+		print 'not proxy'
                 page = urllib2.urlopen(request, timeout = 60 * 2)
 	    try:
                 result = self.verify_page_headers(page.headers)
