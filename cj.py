@@ -192,25 +192,6 @@ def task_del():
     m.del_from_product_timeout()
     m.del_from_price_timeout()
 
-def task_insert(result):
-    n = 0
-    m = Model()
-    plog("start task insert......")
-    for i in result:
-        print("商品id：%s \n 名称: %s \n 价格: %s 元  \n 链接: %s" % (i[0],i[1].strip(),i[2],i[3]))
-        m.insert_into_product(i[0],i[1].strip(),i[3])
-        m.insert_into_price(i[0],i[2])
-        n=n+1
-        all_price = m.select_from_price_by_product_id(i[0])
-        old_price = 0
-        for j in all_price:
-            old_price = float(j[0])
-            break
-        print float(i[2]),old_price
-        if float(i[2]) <= old_price * 80/100:
-            m.update_from_product_by_product_id(i[0])
-    plog("product num : %d"%n)
- 
 def task_spider():
     while True:
         #sleep(60*60*24*random.random() + 24*60*60)
@@ -218,11 +199,9 @@ def task_spider():
 	task_del()
 	####################################
         #jd_result = get_all_price()
-	#task_insert(jd_result)
 	####################################
 	tb = tbSpider()
         tb_result = tb.get_all_price()
-	task_insert(tb_result)
 	####################################
 
 def task_web():
